@@ -6,6 +6,11 @@
 char *path = "/bin";
 char error_message[30] = "An error has occurred\n";
 
+void error() {
+    write(STDERR_FILENO, error_message, strlen(error_message));
+    exit(EXIT_FAILURE);
+}
+
 char* concat(const char *s1, const char *s2)
 {
     char *result = malloc(strlen(s1) + strlen(s2) + 1); // +1 for the null-terminator
@@ -72,14 +77,11 @@ int main(int argc, char *argv[])
     
 	// initialize buffer
 	buffer = (char *)malloc(buffer_size * sizeof(char));
-	if (buffer == NULL) {
-		write(STDERR_FILENO, error_message, strlen(error_message));
-		exit(EXIT_FAILURE);
-	}
+	
+    if (buffer == NULL || argc > 2)
+        error();
 
-    if (argc > 2)
-        exit(EXIT_FAILURE);
-
+    // switch to batch mode if given file
     if (argc == 2) {
         char **pargv = argv+1;
         // check if file can be accessed
@@ -94,6 +96,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    // run commands
     while (1) {
         if (input == stdin)
             printf("dash> ");
@@ -105,10 +108,12 @@ int main(int argc, char *argv[])
         if(characters == -1 || strncmp("exit", buffer, 4) == 0)
             break;
         
-        // give input from stdin to parse_command
+        // remove newline char at end of user input
         char sub_buffer[characters];
         strncpy(sub_buffer, buffer, characters - 1);
         sub_buffer[characters - 1] = '\0';
+
+        // give input from stdin or file to parse_command
         parse_command(sub_buffer);
     }
 
