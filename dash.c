@@ -91,10 +91,8 @@ int main(int argc, char *argv[])
             input = fopen(*pargv, "r");
         }
 
-        if (input == NULL || input == stdin) {
-            write(STDERR_FILENO, error_message, strlen(error_message));
-            exit(EXIT_FAILURE);
-        }
+        if (input == NULL || input == stdin)
+            error();
     }
 
     // run commands
