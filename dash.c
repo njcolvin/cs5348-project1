@@ -28,21 +28,13 @@ char* concat(const char *s1, const char *s2)
 void parse_command(char *buffer)
 {
     // define the required variables
-	char *token, *current_path, *exe_path, *last_token;
+	char *token, *current_path, *path_copy, *exe_path, *last_token, *last_path;
 	const char *token_sep = " \t";
     const char *path_sep = ":";
     char *args[100];
-    int status;
-    //char *token_sep = "&>";
+    int status;    
     
-    // read first token from line
-    current_path = strtok(path, path_sep);
-
-    // check if token is newline aka end of user input
-    if (strcmp("\n", token) == 0)
-        return;
-
-    // parse the rest of the tokens as arguments
+    // parse the tokens into args array
     int i = 0;
     // iterate each token
     for(token = strtok_r(buffer, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
@@ -53,16 +45,25 @@ void parse_command(char *buffer)
     // terminate the list of args
     args[i] = NULL;
 
-    // combine path with first token (executable)
-    exe_path = concat(current_path, concat("/", args[0]));
+    // make a copy of the path to modify during search
+    path_copy = calloc(strlen(path)+1, sizeof(char));
+    strcpy(path_copy, path);
+    // search for the executable in path
+    for(current_path = strtok_r(path_copy, path_sep, &last_path); current_path; current_path = strtok_r(NULL, path_sep, &last_path)) {
+        // combine path with first arg (executable)
+        exe_path = concat(current_path, concat("/", args[0]));
 
-    // check if executable exists
-    if (access(exe_path, X_OK) == 0) {
-        // execute the command
-        if (fork() == 0)
-            execv(exe_path, args);
-        else
-            wait(&status);
+        // check if executable exists
+        if (access(exe_path, X_OK) == 0) {
+            // execute the command
+            if (fork() == 0)
+                execv(exe_path, args);
+            else
+                wait(&status);
+
+            break;
+        }
+        
     }
 
 }
@@ -103,7 +104,7 @@ int main(int argc, char *argv[])
 
         // use getline() to get the input string
         characters = getline(&buffer, &buffer_size, input);
-        
+
         // check if user entered EOF (Ctrl+D) or the first token was exit
         if(characters == -1 || strncmp("exit", buffer, 4) == 0)
             break;
