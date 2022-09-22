@@ -3,45 +3,64 @@
 #include <string.h>
 #include <unistd.h>
 
+char *path = "/bin";
+char error_message[30] = "An error has occurred\n";
 
-
-void parse_command(char *buffer, size_t characters)
+char* concat(const char *s1, const char *s2)
 {
-    // define the required variables
-	char *sentence, *token, *last_sentence, *last_token;
-	char *sentence_sep = ".?!";
-	char *token_sep = " ";    
-    int num_sentences = 0;
-	int num_tokens = 0;
+    char *result = malloc(strlen(s1) + strlen(s2) + 1); // +1 for the null-terminator
 
-    // check if user entered EOF (Ctrl+D) or the first token was BYE
-    if (characters == -1 || strncmp("exit", buffer, 4) == 0)
-        exit(EXIT_SUCCESS);
-
-    // iterate each sentence
-    for(sentence = strtok_r(buffer, sentence_sep, &last_sentence); sentence; sentence = strtok_r(NULL, sentence_sep, &last_sentence)) {
-        num_sentences++;
-        
-        // check if sentence is newline aka end of user input
-        if (strcmp("\n", sentence) == 0)
-            break;
-
-        printf("sentence %d: ", num_sentences);
-
-        // iterate each token in sentence
-        for (token = strtok_r(sentence, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token))
-            num_tokens++;
-        
-        printf("tokens %d\n", num_tokens);
-
-        // reset token counter
-        num_tokens = 0;
+    if (result == NULL) {
+        write(STDERR_FILENO, error_message, strlen(error_message));
+	} else {
+        strcpy(result, s1);
+        strcat(result, s2);
     }
 
-    // reset sentence counter
-    num_sentences = 0;
+    return result;
 }
 
+void parse_command(char *buffer)
+{
+    // define the required variables
+	char *token, *current_path, *exe_path, *last_token;
+	const char *token_sep = " \t";
+    const char *path_sep = ":";
+    char *args[100];
+    int status;
+    //char *token_sep = "&>";
+    
+    // read first token from line
+    current_path = strtok(path, path_sep);
+
+    // check if token is newline aka end of user input
+    if (strcmp("\n", token) == 0)
+        return;
+
+    // parse the rest of the tokens as arguments
+    int i = 0;
+    // iterate each token
+    for(token = strtok_r(buffer, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
+        args[i] = token;
+        i++;
+    }
+
+    // terminate the list of args
+    args[i] = NULL;
+
+    // combine path with first token (executable)
+    exe_path = concat(current_path, concat("/", args[0]));
+
+    // check if executable exists
+    if (access(exe_path, X_OK) == 0) {
+        // execute the command
+        if (fork() == 0)
+            execv(exe_path, args);
+        else
+            wait(&status);
+    }
+
+}
 
 int main(int argc, char *argv[])
 {
@@ -54,9 +73,12 @@ int main(int argc, char *argv[])
 	// initialize buffer
 	buffer = (char *)malloc(buffer_size * sizeof(char));
 	if (buffer == NULL) {
-		perror("unable to allocate buffer");
+		write(STDERR_FILENO, error_message, strlen(error_message));
 		exit(EXIT_FAILURE);
 	}
+
+    if (argc > 2)
+        exit(EXIT_FAILURE);
 
     if (argc == 2) {
         char **pargv = argv+1;
@@ -64,8 +86,11 @@ int main(int argc, char *argv[])
         if (access(*pargv, R_OK) == 0) {
             // open the file
             input = fopen(*pargv, "r");
-            if (input == NULL)
-                exit(EXIT_FAILURE);
+        }
+
+        if (input == NULL || input == stdin) {
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -76,12 +101,15 @@ int main(int argc, char *argv[])
         // use getline() to get the input string
         characters = getline(&buffer, &buffer_size, input);
         
-        // check for EOF or exit command
+        // check if user entered EOF (Ctrl+D) or the first token was exit
         if(characters == -1 || strncmp("exit", buffer, 4) == 0)
             break;
         
         // give input from stdin to parse_command
-        parse_command(buffer, characters);
+        char sub_buffer[characters];
+        strncpy(sub_buffer, buffer, characters - 1);
+        sub_buffer[characters - 1] = '\0';
+        parse_command(sub_buffer);
     }
 
     if (input != stdin)
