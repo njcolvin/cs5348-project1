@@ -5,6 +5,11 @@
 
 char *path = "/bin";
 char error_message[30] = "An error has occurred\n";
+char built_in_commands[3][5] = {
+	"exit",
+	"cd",
+    "path"
+};
 
 void error() {
     write(STDERR_FILENO, error_message, strlen(error_message));
@@ -23,6 +28,46 @@ char* concat(const char *s1, const char *s2)
     }
 
     return result;
+}
+
+void execute_built_in_command(char *args[], int number_of_args, int command_index) {
+    switch (command_index)
+    {
+    case 0:
+        //exit already implemented
+        break;
+    case 1:
+        //implement cd
+        if (number_of_args != 2) {
+            error();
+        }
+        else {
+            if (chdir(args[1]) == 0) {
+                char s[100];
+                printf("%s is the current working directory.\n", getcwd(s,100));
+            }
+            else
+                error();
+        }
+        break;
+    case 2:
+        //implement path
+        path = "";
+        int space_required = 0;
+        for (int i = 1; i < number_of_args; i++) {
+            space_required += strlen(args[i]) + 1;
+        }
+        path = malloc(space_required * sizeof(char));
+        for (int i = 1; i < number_of_args; i++) {
+            if (i != 0)
+                strcat(path, ":");
+            strcat(path, args[i]);
+        }
+        printf("Paths updated!\n");
+        break;
+    default:
+        break;
+    }
 }
 
 void parse_command(char *buffer)
@@ -44,6 +89,13 @@ void parse_command(char *buffer)
 
     // terminate the list of args
     args[i] = NULL;
+
+    int number_of_args = i;
+    for (i=0; i<3; i++) {
+        if (strcmp(args[0],built_in_commands[i]) == 0) {
+            execute_built_in_command(args, number_of_args, i);
+        }
+    }
 
     // make a copy of the path to modify during search
     path_copy = calloc(strlen(path)+1, sizeof(char));
