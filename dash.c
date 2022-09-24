@@ -2,13 +2,48 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 
 char *path = "/bin";
 char error_message[30] = "An error has occurred\n";
+char built_in_commands[3][5] = {
+	"exit",
+	"cd",
+    "path"
+};
 
 void error() {
     write(STDERR_FILENO, error_message, strlen(error_message));
     exit(EXIT_FAILURE);
+}
+
+char *trim_string(char const *str) {
+    int l = strlen(str);
+    int i = 0;
+    //find first index from left
+    while (i < l) {
+        if (isspace(str[i]) == 1) {
+            i++;
+        }
+        break;
+    }
+    if (i == l)
+        return "";
+    int l_index = i;
+    //find first index from right
+    i = l-1;
+    while (i > l_index) {
+        if (isspace(str[i]) == 1)
+        {
+            i--;
+        }
+        break;
+    }
+    int r_index = i;
+    //copy from l_index to r_index and return
+    char *trimmed_str = malloc(sizeof(char) * (r_index - l_index + 2));
+    strncpy(trimmed_str, str + l_index, r_index - l_index + 1);
+    return trimmed_str;
 }
 
 char* concat(const char *s1, const char *s2)
@@ -25,7 +60,47 @@ char* concat(const char *s1, const char *s2)
     return result;
 }
 
-void parse_command(char *buffer)
+void execute_built_in_command(char *args[], int number_of_args, int command_index) {
+    switch (command_index)
+    {
+    case 0:
+        //exit already implemented
+        break;
+    case 1:
+        //implement cd
+        if (number_of_args != 2) {
+            error();
+        }
+        else {
+            if (chdir(args[1]) == 0) {
+                char s[100];
+                printf("%s is the current working directory.\n", getcwd(s,100));
+            }
+            else
+                error();
+        }
+        break;
+    case 2:
+        //implement path
+        path = "";
+        int space_required = 0;
+        for (int i = 1; i < number_of_args; i++) {
+            space_required += strlen(args[i]) + 1;
+        }
+        path = malloc(space_required * sizeof(char));
+        for (int i = 1; i < number_of_args; i++) {
+            if (i != 0)
+                strcat(path, ":");
+            strcat(path, args[i]);
+        }
+        printf("Paths updated!\n");
+        break;
+    default:
+        break;
+    }
+}
+
+void run_command(char *buffer)
 {
     // define the required variables
 	char *token, *current_path, *path_copy, *exe_path, *last_token, *last_path;
@@ -44,6 +119,13 @@ void parse_command(char *buffer)
 
     // terminate the list of args
     args[i] = NULL;
+
+    int number_of_args = i;
+    for (i=0; i<3; i++) {
+        if (strcmp(args[0],built_in_commands[i]) == 0) {
+            execute_built_in_command(args, number_of_args, i);
+        }
+    }
 
     // make a copy of the path to modify during search
     path_copy = calloc(strlen(path)+1, sizeof(char));
@@ -65,7 +147,27 @@ void parse_command(char *buffer)
         }
         
     }
+}
 
+void parse_command(char *command) {
+    char *delimiter_address = strchr(command, '&');
+    int command_length = strlen(command);
+    if (command_length == 0)
+        return;
+    int index = (delimiter_address == NULL ? -1 : delimiter_address - command);
+    char *current_command;
+    if (index == -1) {
+        current_command = malloc(sizeof(char) * (command_length + 1));
+        strcpy(current_command, command);
+    }
+    else {
+        current_command = malloc(sizeof(char) * (index + 1));
+        strncpy(current_command, command, index);
+        char *parallel_commands = malloc(sizeof(char) * (command_length - index));
+        strcpy(parallel_commands, command + index + 1);
+        parse_command(parallel_commands);
+    }
+    printf("%s\n", trim_string(current_command));
 }
 
 int main(int argc, char *argv[])
@@ -112,7 +214,7 @@ int main(int argc, char *argv[])
         strncpy(sub_buffer, buffer, characters - 1);
         sub_buffer[characters - 1] = '\0';
 
-        // give input from stdin or file to parse_command
+        // give input from stdin or file to run_command
         parse_command(sub_buffer);
     }
 
