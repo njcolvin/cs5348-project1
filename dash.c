@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <fcntl.h>
 
 char *path = "/bin";
 char error_message[30] = "An error has occurred\n";
@@ -103,11 +104,35 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
 void run_command(char *buffer)
 {
     // define the required variables
-	char *buffer_copy, *token, *current_path, *path_copy, *exe_path, *last_token, *last_path;
+	char *buffer_copy, *token, *current_path, *path_copy, *exe_path, *last_token, *last_path, *index_of_redirect, *output_file;
+    const char *redirect = ">";
 	const char *token_sep = " \t";
     const char *path_sep = ":";
     int status;    
+    int i = 0;
+
+    // see if the command contains a redirect
+    index_of_redirect = strstr(buffer, redirect);
+    if (index_of_redirect != NULL) {
+        // get the index of the redirect character
+        int index = index_of_redirect - buffer;
+        int length = strlen(buffer);
+                    
+        // if index is the first or last symbol of the command then it is an error
+        if (index == 0 || index == length - 1)
+            error();
+        else {
+            // trim the command up to the redirect symbol and set output_file to the trimmed susbtring after the redirect symbol
+            output_file = (char *) malloc((strlen(index_of_redirect)) * sizeof(char));
+            strncpy(output_file, index_of_redirect + 1, length - index);
+            output_file[length - index + 1] = '\0';
+            buffer[index] = '\0';
+            while(isspace(output_file[0]))
+                output_file = trim_string(output_file);
+        }
+    }
     
+
     // parse the tokens into args array
 
     // copy the buffer as it will be modified during iteration
@@ -115,17 +140,16 @@ void run_command(char *buffer)
     strcpy(buffer_copy, buffer);
 
     // iterate each token to get the size of the array
-    int i = 0;
-    for(token = strtok_r(buffer, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token))
+    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token))
         i++;
 
 
     // initialize args
     char *args[i + 1];
 
-    // iterate each token again to add it to the array
+    // iterate each token again to add them to the array
     i = 0;
-    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
+    for(token = strtok_r(buffer, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
         args[i] = token;
         i++;
     }
@@ -151,9 +175,19 @@ void run_command(char *buffer)
         // check if executable exists
         if (access(exe_path, X_OK) == 0) {
             // execute the command
-            if (fork() == 0)
+            if (fork() == 0) {
+                if (index_of_redirect != NULL) {
+                    // redirect the command output
+                    int fd = open(output_file, O_CREAT | O_WRONLY, 0777);
+                    // redirect stdout
+                    dup2(fd, 1);
+                    //redirect stderr
+                    dup2(fd, 2);
+                    // file handles set; file can be closed
+                    close(fd);
+                }
                 execv(exe_path, args);
-            else
+            } else
                 wait(&status);
 
             break;
@@ -180,7 +214,7 @@ void parse_command(char *command) {
         strcpy(parallel_commands, command + index + 1);
         parse_command(parallel_commands);
     }
-    printf("%s\n", trim_string(current_command));
+    run_command(trim_string(current_command));
 }
 
 int main(int argc, char *argv[])
