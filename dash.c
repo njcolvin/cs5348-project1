@@ -103,16 +103,29 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
 void run_command(char *buffer)
 {
     // define the required variables
-	char *token, *current_path, *path_copy, *exe_path, *last_token, *last_path;
+	char *buffer_copy, *token, *current_path, *path_copy, *exe_path, *last_token, *last_path;
 	const char *token_sep = " \t";
     const char *path_sep = ":";
-    char *args[100];
     int status;    
     
     // parse the tokens into args array
+
+    // copy the buffer as it will be modified during iteration
+    buffer_copy = calloc(strlen(buffer)+1, sizeof(char));
+    strcpy(buffer_copy, buffer);
+
+    // iterate each token to get the size of the array
     int i = 0;
-    // iterate each token
-    for(token = strtok_r(buffer, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
+    for(token = strtok_r(buffer, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token))
+        i++;
+
+
+    // initialize args
+    char *args[i + 1];
+
+    // iterate each token again to add it to the array
+    i = 0;
+    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
         args[i] = token;
         i++;
     }
