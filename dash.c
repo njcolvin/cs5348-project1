@@ -108,7 +108,7 @@ void run_command(char *buffer)
     const char *redirect = ">";
 	const char *token_sep = " \t";
     const char *path_sep = ":";
-    int status;    
+    // int status;    
     int i = 0;
 
     // see if the command contains a redirect
@@ -163,7 +163,7 @@ void run_command(char *buffer)
             execute_built_in_command(args, number_of_args, i);
         }
     }
-
+    int command_exists = 0;
     // make a copy of the path to modify during search
     path_copy = calloc(strlen(path)+1, sizeof(char));
     strcpy(path_copy, path);
@@ -175,46 +175,53 @@ void run_command(char *buffer)
         // check if executable exists
         if (access(exe_path, X_OK) == 0) {
             // execute the command
-            if (fork() == 0) {
-                if (index_of_redirect != NULL) {
-                    // redirect the command output
-                    int fd = open(output_file, O_CREAT | O_WRONLY, 0777);
-                    // redirect stdout
-                    dup2(fd, 1);
-                    //redirect stderr
-                    dup2(fd, 2);
-                    // file handles set; file can be closed
-                    close(fd);
-                }
-                execv(exe_path, args);
-            } else
-                wait(&status);
-
+            if (index_of_redirect != NULL) {
+                // redirect the command output
+                int fd = open(output_file, O_CREAT | O_WRONLY, 0777);
+                // redirect stdout
+                dup2(fd, 1);
+                //redirect stderr
+                dup2(fd, 2);
+                // file handles set; file can be closed
+                close(fd);
+            }
+            sleep(10);
+            execv(exe_path, args);
+            command_exists = 1;
             break;
-        }
-        
+        } 
+    }
+    if (command_exists == 0) {
+        error();
     }
 }
 
 void parse_command(char *command) {
-    char *delimiter_address = strchr(command, '&');
-    int command_length = strlen(command);
-    if (command_length == 0)
-        return;
-    int index = (delimiter_address == NULL ? -1 : delimiter_address - command);
-    char *current_command;
-    if (index == -1) {
-        current_command = malloc(sizeof(char) * (command_length + 1));
-        strcpy(current_command, command);
+    int status;
+    pid_t process_id = fork();
+    if (process_id == 0) {
+        printf("START\n");
+        char *delimiter_address = strchr(command, '&');
+        int command_length = strlen(command);
+        if (command_length == 0)
+            return;
+        int index = (delimiter_address == NULL ? -1 : delimiter_address - command);
+        char *current_command;
+        if (index == -1) {
+            current_command = malloc(sizeof(char) * (command_length + 1));
+            strcpy(current_command, command);
+        }
+        else {
+            current_command = malloc(sizeof(char) * (index + 1));
+            strncpy(current_command, command, index);
+            char *parallel_commands = malloc(sizeof(char) * (command_length - index));
+            strcpy(parallel_commands, command + index + 1);
+            parse_command(parallel_commands);
+        }
+        run_command(trim_string(current_command));
     }
-    else {
-        current_command = malloc(sizeof(char) * (index + 1));
-        strncpy(current_command, command, index);
-        char *parallel_commands = malloc(sizeof(char) * (command_length - index));
-        strcpy(parallel_commands, command + index + 1);
-        parse_command(parallel_commands);
-    }
-    run_command(trim_string(current_command));
+    else
+        wait(&status);
 }
 
 int main(int argc, char *argv[])
