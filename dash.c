@@ -65,7 +65,8 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     switch (command_index)
     {
     case 0:
-        //exit already implemented
+        //implement exit
+        exit(EXIT_SUCCESS);
         break;
     case 1:
         //implement cd
@@ -161,6 +162,7 @@ void run_command(char *buffer)
     for (i=0; i<3; i++) {
         if (strcmp(args[0],built_in_commands[i]) == 0) {
             execute_built_in_command(args, number_of_args, i);
+            return;
         }
     }
     int command_exists = 0;
@@ -169,6 +171,8 @@ void run_command(char *buffer)
     strcpy(path_copy, path);
     // search for the executable in path
     for(current_path = strtok_r(path_copy, path_sep, &last_path); current_path; current_path = strtok_r(NULL, path_sep, &last_path)) {
+        if (command_exists == 1) 
+            break;
         // combine path with first arg (executable)
         exe_path = concat(current_path, concat("/", args[0]));
 
@@ -185,10 +189,8 @@ void run_command(char *buffer)
                 // file handles set; file can be closed
                 close(fd);
             }
-            sleep(10);
-            execv(exe_path, args);
             command_exists = 1;
-            break;
+            execv(exe_path, args);
         } 
     }
     if (command_exists == 0) {
@@ -200,7 +202,6 @@ void parse_command(char *command) {
     int status;
     pid_t process_id = fork();
     if (process_id == 0) {
-        printf("START\n");
         char *delimiter_address = strchr(command, '&');
         int command_length = strlen(command);
         if (command_length == 0)
@@ -220,8 +221,10 @@ void parse_command(char *command) {
         }
         run_command(trim_string(current_command));
     }
-    else
+    else {
         wait(&status);
+    }
+    
 }
 
 int main(int argc, char *argv[])
@@ -246,6 +249,9 @@ int main(int argc, char *argv[])
             // open the file
             input = fopen(*pargv, "r");
         }
+        else {
+            printf("File can't be accessed\n");
+        }
 
         if (input == NULL || input == stdin)
             error();
@@ -260,7 +266,7 @@ int main(int argc, char *argv[])
         characters = getline(&buffer, &buffer_size, input);
 
         // check if user entered EOF (Ctrl+D) or the first token was exit
-        if(characters == -1 || strncmp("exit", buffer, 4) == 0)
+        if(characters == -1)
             break;
         
         // remove newline char at end of user input
@@ -270,6 +276,8 @@ int main(int argc, char *argv[])
 
         // give input from stdin or file to run_command
         parse_command(sub_buffer);
+        if (strstr(sub_buffer,"exit") != NULL)
+            break;
     }
 
     if (input != stdin)
