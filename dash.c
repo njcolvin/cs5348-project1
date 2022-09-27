@@ -107,7 +107,7 @@ void run_command(char *buffer)
     // define the required variables
 	char *buffer_copy, *token, *current_path, *path_copy, *exe_path, *last_token, *last_path, *index_of_redirect, *output_file;
     const char *redirect = ">";
-	const char *token_sep = " \t";
+	const char *token_sep = " \t\v\f\r\n";
     const char *path_sep = ":";
     // int status;    
     int i = 0;
@@ -269,14 +269,9 @@ int main(int argc, char *argv[])
         if(characters == -1)
             break;
         
-        // remove newline char at end of user input
-        char sub_buffer[characters];
-        strncpy(sub_buffer, buffer, characters - 1);
-        sub_buffer[characters - 1] = '\0';
-
         // give input from stdin or file to run_command
-        parse_command(sub_buffer);
-        if (strstr(sub_buffer,"exit") != NULL)
+        parse_command(buffer);
+        if (strstr(buffer,"exit") != NULL)
             break;
     }
 
