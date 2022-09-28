@@ -169,46 +169,50 @@ void run_command(char *buffer)
             return;
         }
     }
-    int command_exists = 0;
-    // make a copy of the path to modify during search
-    path_copy = calloc(strlen(path)+1, sizeof(char));
-    strcpy(path_copy, path);
-    // search for the executable in path
-    for(current_path = strtok_r(path_copy, path_sep, &last_path); current_path; current_path = strtok_r(NULL, path_sep, &last_path)) {
-        if (command_exists == 1) 
-            break;
-        // combine path with first arg (executable)
-        exe_path = concat(current_path, concat("/", args[0]));
 
-        // check if executable exists
-        if (access(exe_path, X_OK) == 0) {
-            // execute the command
-            if (index_of_redirect != NULL) {
-                // redirect the command output
-                int fd = open(output_file, O_CREAT | O_WRONLY, 0777);
-                // redirect stdout
-                dup2(fd, 1);
-                //redirect stderr
-                dup2(fd, 2);
-                // file handles set; file can be closed
-                close(fd);
-            }
-            command_exists = 1;
-            pid_t process_id = fork();
-            int status;
-            if (process_id == 0)
-            {
+    int status;
+    pid_t process_id = fork();
+    if (process_id == 0) {
+
+        int command_exists = 0;
+        // make a copy of the path to modify during search
+        path_copy = calloc(strlen(path)+1, sizeof(char));
+        strcpy(path_copy, path);
+        // search for the executable in path
+        for(current_path = strtok_r(path_copy, path_sep, &last_path); current_path; current_path = strtok_r(NULL, path_sep, &last_path)) {
+            if (command_exists == 1) 
+                break;
+            // combine path with first arg (executable)
+            exe_path = concat(current_path, concat("/", args[0]));
+
+            // check if executable exists
+            if (access(exe_path, X_OK) == 0) {
+                // execute the command
+                if (index_of_redirect != NULL) {
+                    // redirect the command output
+                    int fd = open(output_file, O_CREAT | O_WRONLY, 0777);
+                    // redirect stdout
+                    dup2(fd, 1);
+                    //redirect stderr
+                    dup2(fd, 2);
+                    // file handles set; file can be closed
+                    close(fd);
+                }
+                command_exists = 1;
+
                 execv(exe_path, args);
-            }
-            else {
-                wait(&status);
-            }
-            
-        } 
+                break;
+                
+            } 
+        }
+        if (command_exists == 0) {
+            error();
+        }
+    } else {
+        wait(&status);
     }
-    if (command_exists == 0) {
-        error();
-    }
+
+    
 }
 
 void parse_command(char *command) {
