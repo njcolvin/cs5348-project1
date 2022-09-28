@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <sys/wait.h>
 
 char *path = "/bin";
 char error_message[30] = "An error has occurred\n";
@@ -16,7 +17,6 @@ int exit_requested = 0;
 
 void error() {
     write(STDERR_FILENO, error_message, strlen(error_message));
-    // exit(EXIT_FAILURE);
 }
 
 char *trim_string(char const *str) {
@@ -42,6 +42,7 @@ char *trim_string(char const *str) {
         break;
     }
     int r_index = i;
+    
     //copy from l_index to r_index and return
     char *trimmed_str = malloc(sizeof(char) * (r_index - l_index + 2));
     strncpy(trimmed_str, str + l_index, r_index - l_index + 1);
@@ -66,38 +67,32 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     switch (command_index)
     {
     case 0:
-        //implement exit
-        // exit(EXIT_SUCCESS);
-        exit_requested = 1;
+        if (number_of_args > 1)
+            error();
+        else
+            exit_requested = 1;
+
         break;
     case 1:
         //implement cd
-        if (number_of_args != 2) {
+        if (number_of_args != 2 || chdir(args[1]) != 0)
             error();
-        }
-        else {
-            if (chdir(args[1]) == 0) {
-                char s[100];
-                printf("%s is the current working directory.\n", getcwd(s,100));
-            }
-            else
-                error();
-        }
+
         break;
     case 2:
         //implement path
         path = "";
         int space_required = 0;
-        for (int i = 1; i < number_of_args; i++) {
+        int i;
+        for (i = 1; i < number_of_args; i++) {
             space_required += strlen(args[i]) + 1;
         }
         path = malloc(space_required * sizeof(char));
-        for (int i = 1; i < number_of_args; i++) {
+        for (i = 1; i < number_of_args; i++) {
             if (i != 0)
                 strcat(path, ":");
             strcat(path, args[i]);
         }
-        printf("Paths updated!\n");
         break;
     default:
         break;
@@ -114,15 +109,30 @@ void run_command(char *buffer)
     // int status;    
     int i = 0;
 
+    
+    
+
+    // parse the tokens into args array
+
+    // copy the buffer as it will be modified during iteration
+    buffer_copy = calloc(strlen(buffer)+1, sizeof(char));
+    strcpy(buffer_copy, buffer);
+
+    // iterate each token to get the size of the array
+    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token))
+        i++;
+
+
     // see if the command contains a redirect
     index_of_redirect = strstr(buffer, redirect);
+    output_file = NULL;
     if (index_of_redirect != NULL) {
         // get the index of the redirect character
         int index = index_of_redirect - buffer;
         int length = strlen(buffer);
-                    
         // if index is the first or last symbol of the command then it is an error
-        if (index == 0 || index == length - 1) {
+        
+        if (i != 3 || index == 0 || index == length - 1) {
             error();
             return;
         }
@@ -136,18 +146,6 @@ void run_command(char *buffer)
                 output_file = trim_string(output_file);
         }
     }
-    
-
-    // parse the tokens into args array
-
-    // copy the buffer as it will be modified during iteration
-    buffer_copy = calloc(strlen(buffer)+1, sizeof(char));
-    strcpy(buffer_copy, buffer);
-
-    // iterate each token to get the size of the array
-    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token))
-        i++;
-
 
     // initialize args
     char *args[i + 1];
@@ -188,7 +186,7 @@ void run_command(char *buffer)
             // check if executable exists
             if (access(exe_path, X_OK) == 0) {
                 // execute the command
-                if (index_of_redirect != NULL) {
+                if (index_of_redirect != NULL && output_file != NULL) {
                     // redirect the command output
                     int fd = open(output_file, O_CREAT | O_WRONLY, 0777);
                     // redirect stdout
@@ -205,9 +203,10 @@ void run_command(char *buffer)
                 
             } 
         }
-        if (command_exists == 0) {
+
+        if (command_exists == 0)
             error();
-        }
+
     } else {
         wait(&status);
     }
@@ -220,6 +219,7 @@ void parse_command(char *command) {
     // pid_t process_id = fork();
     // if (process_id == 0) {
         char *delimiter_address = strchr(command, '&');
+
         int command_length = strlen(command);
         if (command_length == 0)
             return;
@@ -242,8 +242,14 @@ void parse_command(char *command) {
         }
         if (strlen(trim_string(current_command)) == 0) 
             error();
-        else
-            run_command(trim_string(current_command));
+        else {
+            char *trimmed_cmd = trim_string(current_command);
+            if (trimmed_cmd == NULL)
+                return;
+            
+            run_command(trimmed_cmd);
+
+        }
     // }
     // else {
     //     wait(&status);
@@ -277,11 +283,14 @@ int main(int argc, char *argv[])
             input = fopen(*pargv, "r");
         }
         else {
-            printf("File can't be accessed\n");
+            error();
+            exit(EXIT_FAILURE);
         }
 
-        if (input == NULL || input == stdin)
+        if (input == NULL || input == stdin) {
             error();
+            exit(EXIT_FAILURE);
+        }
     }
 
     // run commands
