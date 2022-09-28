@@ -14,8 +14,11 @@ char built_in_commands[3][5] = {
     "path"
 };
 int exit_requested = 0;
+int debug_mode = 1;
 
-void error() {
+void error(char *source) {
+    if (debug_mode == 1) 
+        write(STDERR_FILENO, source, strlen(source));
     write(STDERR_FILENO, error_message, strlen(error_message));
 }
 
@@ -27,7 +30,8 @@ char *trim_string(char const *str) {
         if (isspace(str[i]) == 1) {
             i++;
         }
-        break;
+        else
+            break;
     }
     if (i == l)
         return "";
@@ -39,7 +43,8 @@ char *trim_string(char const *str) {
         {
             i--;
         }
-        break;
+        else
+            break;
     }
     int r_index = i;
     
@@ -68,7 +73,7 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     {
     case 0:
         if (number_of_args > 1)
-            error();
+            error("LINE 74");
         else
             exit_requested = 1;
 
@@ -76,7 +81,7 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     case 1:
         //implement cd
         if (number_of_args != 2 || chdir(args[1]) != 0)
-            error();
+            error("LINE 82");
 
         break;
     case 2:
@@ -87,6 +92,7 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
         for (i = 1; i < number_of_args; i++) {
             space_required += strlen(args[i]) + 1;
         }
+        
         path = malloc(space_required * sizeof(char));
         for (i = 1; i < number_of_args; i++) {
             if (i != 0)
@@ -133,7 +139,7 @@ void run_command(char *buffer)
         // if index is the first or last symbol of the command then it is an error
         
         if (i != 3 || index == 0 || index == length - 1) {
-            error();
+            error("LINE 139");
             return;
         }
         else {
@@ -199,13 +205,13 @@ void run_command(char *buffer)
                 command_exists = 1;
 
                 execv(exe_path, args);
-                break;
                 
             } 
         }
 
         if (command_exists == 0)
-            error();
+            error("LINE 211");
+        exit(0);
 
     } else {
         wait(&status);
@@ -221,7 +227,7 @@ void parse_command(char *command) {
         char *delimiter_address = strchr(command, '&');
 
         int command_length = strlen(command);
-        if (command_length == 0)
+        if (command_length <= 1)
             return;
         int index = (delimiter_address == NULL ? -1 : delimiter_address - command);
         char *current_command;
@@ -230,7 +236,7 @@ void parse_command(char *command) {
             strcpy(current_command, command);
         }
         else if (index == 0) {
-            error();
+            error("LINE 236");
             return;
         }
         else {
@@ -241,7 +247,7 @@ void parse_command(char *command) {
             parse_command(parallel_commands);
         }
         if (strlen(trim_string(current_command)) == 0) 
-            error();
+            error("LINE 247");
         else {
             char *trimmed_cmd = trim_string(current_command);
             if (trimmed_cmd == NULL)
@@ -260,20 +266,17 @@ void parse_command(char *command) {
 int main(int argc, char *argv[])
 {
 
-	char *buffer;
 	size_t characters;
-    size_t buffer_size = 32;
+    size_t buffer_size = 0;
     FILE *input = stdin;
-    
 	// initialize buffer
-	buffer = (char *)malloc(buffer_size * sizeof(char));
 	
-    if (buffer == NULL || argc > 2) {
-        error();
+    if (argc > 2) {
+        error("LINE 275");
         exit(EXIT_FAILURE);
     }
         
-
+    
     // switch to batch mode if given file
     if (argc == 2) {
         char **pargv = argv+1;
@@ -283,12 +286,12 @@ int main(int argc, char *argv[])
             input = fopen(*pargv, "r");
         }
         else {
-            error();
+            error("LINE 289");
             exit(EXIT_FAILURE);
         }
 
         if (input == NULL || input == stdin) {
-            error();
+            error("LINE 294");
             exit(EXIT_FAILURE);
         }
     }
@@ -297,18 +300,23 @@ int main(int argc, char *argv[])
     while (1) {
         if (input == stdin)
             printf("dash> ");
-
+        char *buffer = (char *)malloc(buffer_size * sizeof(char));
+        if (buffer == NULL) {
+            error("LINE 275");
+            exit(EXIT_FAILURE);
+        }
         // use getline() to get the input string
         characters = getline(&buffer, &buffer_size, input);
-
         // check if user entered EOF (Ctrl+D) or the first token was exit
         if(characters == -1)
             break;
         
+
         // give input from stdin or file to run_command
-        parse_command(buffer);
+        parse_command(trim_string(buffer));
         // if (strstr(buffer,"exit") != NULL)
         //     break;
+        free(buffer);
         if (exit_requested == 1)
             break;
     }
@@ -316,9 +324,5 @@ int main(int argc, char *argv[])
     if (input != stdin)
         fclose(input);
 
-    if (buffer)
-        free(buffer);
-
     exit(EXIT_SUCCESS);
 }
-
