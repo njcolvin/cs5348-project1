@@ -12,10 +12,11 @@ char built_in_commands[3][5] = {
 	"cd",
     "path"
 };
+int exit_requested = 0;
 
 void error() {
     write(STDERR_FILENO, error_message, strlen(error_message));
-    exit(EXIT_FAILURE);
+    // exit(EXIT_FAILURE);
 }
 
 char *trim_string(char const *str) {
@@ -66,7 +67,8 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     {
     case 0:
         //implement exit
-        exit(EXIT_SUCCESS);
+        // exit(EXIT_SUCCESS);
+        exit_requested = 1;
         break;
     case 1:
         //implement cd
@@ -120,8 +122,10 @@ void run_command(char *buffer)
         int length = strlen(buffer);
                     
         // if index is the first or last symbol of the command then it is an error
-        if (index == 0 || index == length - 1)
+        if (index == 0 || index == length - 1) {
             error();
+            return;
+        }
         else {
             // trim the command up to the redirect symbol and set output_file to the trimmed susbtring after the redirect symbol
             output_file = (char *) malloc((strlen(index_of_redirect)) * sizeof(char));
@@ -190,7 +194,16 @@ void run_command(char *buffer)
                 close(fd);
             }
             command_exists = 1;
-            execv(exe_path, args);
+            pid_t process_id = fork();
+            int status;
+            if (process_id == 0)
+            {
+                execv(exe_path, args);
+            }
+            else {
+                wait(&status);
+            }
+            
         } 
     }
     if (command_exists == 0) {
@@ -199,9 +212,9 @@ void run_command(char *buffer)
 }
 
 void parse_command(char *command) {
-    int status;
-    pid_t process_id = fork();
-    if (process_id == 0) {
+    // int status;
+    // pid_t process_id = fork();
+    // if (process_id == 0) {
         char *delimiter_address = strchr(command, '&');
         int command_length = strlen(command);
         if (command_length == 0)
@@ -212,6 +225,10 @@ void parse_command(char *command) {
             current_command = malloc(sizeof(char) * (command_length + 1));
             strcpy(current_command, command);
         }
+        else if (index == 0) {
+            error();
+            return;
+        }
         else {
             current_command = malloc(sizeof(char) * (index + 1));
             strncpy(current_command, command, index);
@@ -219,11 +236,14 @@ void parse_command(char *command) {
             strcpy(parallel_commands, command + index + 1);
             parse_command(parallel_commands);
         }
-        run_command(trim_string(current_command));
-    }
-    else {
-        wait(&status);
-    }
+        if (strlen(trim_string(current_command)) == 0) 
+            error();
+        else
+            run_command(trim_string(current_command));
+    // }
+    // else {
+    //     wait(&status);
+    // }
     
 }
 
@@ -238,8 +258,11 @@ int main(int argc, char *argv[])
 	// initialize buffer
 	buffer = (char *)malloc(buffer_size * sizeof(char));
 	
-    if (buffer == NULL || argc > 2)
+    if (buffer == NULL || argc > 2) {
         error();
+        exit(EXIT_FAILURE);
+    }
+        
 
     // switch to batch mode if given file
     if (argc == 2) {
@@ -271,7 +294,9 @@ int main(int argc, char *argv[])
         
         // give input from stdin or file to run_command
         parse_command(buffer);
-        if (strstr(buffer,"exit") != NULL)
+        // if (strstr(buffer,"exit") != NULL)
+        //     break;
+        if (exit_requested == 1)
             break;
     }
 
