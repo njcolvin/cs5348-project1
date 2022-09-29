@@ -13,12 +13,10 @@ char built_in_commands[3][5] = {
 	"cd",
     "path"
 };
+const char *redirect = ">";
 int exit_requested = 0;
-int debug_mode = 1;
 
-void error(char *source) {
-    if (debug_mode == 1) 
-        write(STDERR_FILENO, source, strlen(source));
+void error() {
     write(STDERR_FILENO, error_message, strlen(error_message));
 }
 
@@ -30,8 +28,9 @@ char *trim_string(char const *str) {
         if (isspace(str[i]) == 1) {
             i++;
         }
-        else
+        else {
             break;
+        }
     }
     if (i == l)
         return "";
@@ -43,8 +42,9 @@ char *trim_string(char const *str) {
         {
             i--;
         }
-        else
+        else {
             break;
+        }
     }
     int r_index = i;
     
@@ -73,7 +73,7 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     {
     case 0:
         if (number_of_args > 1)
-            error("LINE 74");
+            error();
         else
             exit_requested = 1;
 
@@ -81,7 +81,7 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     case 1:
         //implement cd
         if (number_of_args != 2 || chdir(args[1]) != 0)
-            error("LINE 82");
+            error();
 
         break;
     case 2:
@@ -91,85 +91,133 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
         int i;
         for (i = 1; i < number_of_args; i++) {
             space_required += strlen(args[i]) + 1;
+
         }
-        
         path = malloc(space_required * sizeof(char));
         for (i = 1; i < number_of_args; i++) {
-            if (i != 0)
+            if (i != 1)
                 strcat(path, ":");
             strcat(path, args[i]);
         }
+        
+
         break;
     default:
         break;
     }
 }
 
-void run_command(char *buffer)
-{
-    // define the required variables
-	char *buffer_copy, *token, *current_path, *path_copy, *exe_path, *last_token, *last_path, *index_of_redirect, *output_file;
-    const char *redirect = ">";
-	const char *token_sep = " \t\v\f\r\n";
-    const char *path_sep = ":";
-    // int status;    
+int get_arg_count(char *buffer) {
+    char *buffer_copy, *token, *last_token;
+    const char *token_sep = " \t\v\f\r\n";
     int i = 0;
-
-    
-    
-
-    // parse the tokens into args array
 
     // copy the buffer as it will be modified during iteration
     buffer_copy = calloc(strlen(buffer)+1, sizeof(char));
     strcpy(buffer_copy, buffer);
 
     // iterate each token to get the size of the array
-    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token))
+    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
         i++;
-
-
-    // see if the command contains a redirect
-    index_of_redirect = strstr(buffer, redirect);
-    output_file = NULL;
-    if (index_of_redirect != NULL) {
-        // get the index of the redirect character
-        int index = index_of_redirect - buffer;
-        int length = strlen(buffer);
-        // if index is the first or last symbol of the command then it is an error
-        
-        if (i != 3 || index == 0 || index == length - 1) {
-            error("LINE 139");
-            return;
-        }
-        else {
-            // trim the command up to the redirect symbol and set output_file to the trimmed susbtring after the redirect symbol
-            output_file = (char *) malloc((strlen(index_of_redirect)) * sizeof(char));
-            strncpy(output_file, index_of_redirect + 1, length - index);
-            output_file[length - index + 1] = '\0';
-            buffer[index] = '\0';
-            while(isspace(output_file[0]))
-                output_file = trim_string(output_file);
-        }
     }
 
+    return i;
+}
+
+char** get_args(char *buffer, int arg_count) {
+    // parse the tokens into args array
+
+    char *buffer_copy, *token, *last_token;
+    const char *token_sep = " \t\v\f\r\n";
+    int i = 0;
+    char* index_of_redirect;
+    // copy the buffer as it will be modified during iteration
+    buffer_copy = calloc(strlen(buffer)+1, sizeof(char));
+    strcpy(buffer_copy, buffer);
+
+    index_of_redirect = strstr(buffer_copy, redirect);
+    if (index_of_redirect != NULL) {
+        int index = index_of_redirect - buffer_copy;
+        if (index == 0) {
+            error();
+            return NULL;
+        }
+        buffer_copy[index] = '\0';
+    }
     // initialize args
-    char *args[i + 1];
+    char **args;
+    args = malloc((arg_count + 1) * sizeof(char *));
 
     // iterate each token again to add them to the array
-    i = 0;
-    for(token = strtok_r(buffer, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
+    for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
+        args[i] = malloc(strlen(token) * sizeof(char));
         args[i] = token;
         i++;
     }
 
+    if (i == 0)
+        return NULL;
+
     // terminate the list of args
     args[i] = NULL;
 
-    int number_of_args = i;
-    for (i=0; i<3; i++) {
-        if (strcmp(args[0],built_in_commands[i]) == 0) {
-            execute_built_in_command(args, number_of_args, i);
+    return args;
+}
+
+void run_command(char *buffer)
+{
+    // define the required variables
+	char *buffer_copy, *token, *current_path, *path_copy, *exe_path, *last_token, *last_path, *index_of_redirect, *output_file;
+    
+	const char *token_sep = " \t\v\f\r\n";
+    const char *path_sep = ":!";
+    // int status;    
+    int arg_count;
+
+    arg_count = get_arg_count(buffer);
+    char *args[arg_count + 1];
+    char **arg_pointers = get_args(buffer, arg_count);
+    if (arg_pointers == NULL)
+        return;
+
+    int i;
+    for (i = 0; i < arg_count; i++) {
+        args[i] = arg_pointers[i];
+    }
+
+    args[arg_count] = NULL;
+    // see if the command contains a redirect
+    index_of_redirect = strstr(buffer, redirect);
+    output_file = NULL;
+    if (index_of_redirect != NULL) {
+        buffer_copy = calloc(strlen(index_of_redirect), sizeof(char));
+        strcpy(buffer_copy, index_of_redirect + 1);
+        // get the index of the redirect character
+        int index = index_of_redirect - buffer;
+        int length = strlen(buffer);
+        // if index is the first or last symbol of the command then it is an error
+        // iterate each token to get the size of the array
+
+        if (index == 0 || index == length - 1) {
+            error();
+            return;
+        }
+
+        int token_count = 0;
+        for(token = strtok_r(buffer_copy, token_sep, &last_token); token; token = strtok_r(NULL, token_sep, &last_token)) {
+            token_count++;
+            if (token_count > 1) {
+                error();
+                return;
+            }
+
+            // trim the command up to the redirect symbol and set output_file to the trimmed susbtring after the redirect symbol
+            output_file = token;
+            buffer[index] = '\0';
+        }
+
+        if (token_count == 0) {
+            error();
             return;
         }
     }
@@ -185,15 +233,20 @@ void run_command(char *buffer)
         // search for the executable in path
         for(current_path = strtok_r(path_copy, path_sep, &last_path); current_path; current_path = strtok_r(NULL, path_sep, &last_path)) {
             if (command_exists == 1) 
-                break;
+                break;            
+
             // combine path with first arg (executable)
-            exe_path = concat(current_path, concat("/", args[0]));
+            if (strcmp(current_path + strlen(current_path) - 1, "/") == 0)
+                exe_path = concat(current_path, args[0]);
+            else
+                exe_path = concat(current_path, concat("/", args[0]));
 
             // check if executable exists
             if (access(exe_path, X_OK) == 0) {
                 // execute the command
                 if (index_of_redirect != NULL && output_file != NULL) {
                     // redirect the command output
+                    
                     int fd = open(output_file, O_CREAT | O_WRONLY, 0777);
                     // redirect stdout
                     dup2(fd, 1);
@@ -202,17 +255,18 @@ void run_command(char *buffer)
                     // file handles set; file can be closed
                     close(fd);
                 }
+
                 command_exists = 1;
 
                 execv(exe_path, args);
-                
-            } 
+            }
         }
 
-        if (command_exists == 0)
-            error("LINE 211");
-        exit(0);
+        if (command_exists == 0) {
+            error();
+        }
 
+        _exit(0);
     } else {
         wait(&status);
     }
@@ -225,7 +279,8 @@ void parse_command(char *command) {
     // pid_t process_id = fork();
     // if (process_id == 0) {
         char *delimiter_address = strchr(command, '&');
-
+        
+        int built_in_run = 0;
         int command_length = strlen(command);
         if (command_length <= 1)
             return;
@@ -234,21 +289,61 @@ void parse_command(char *command) {
         if (index == -1) {
             current_command = malloc(sizeof(char) * (command_length + 1));
             strcpy(current_command, command);
+
+            // check for built in
+            int arg_count;
+            arg_count = get_arg_count(current_command);
+            char *args[arg_count + 1];
+            char **arg_pointers = get_args(current_command, arg_count);
+            if (arg_pointers == NULL)
+                return;
+            int i;
+            for (i = 0; i < arg_count; i++) {
+                args[i] = arg_pointers[i];
+            }
+
+            for (i=0; i<3; i++) {
+                if (strcmp(args[0],built_in_commands[i]) == 0) {
+                    execute_built_in_command(args, arg_count, i);
+                    return;
+                }
+            }
         }
         else if (index == 0) {
-            error("LINE 236");
+            error();
             return;
         }
         else {
             current_command = malloc(sizeof(char) * (index + 1));
             strncpy(current_command, command, index);
+
+
+            // check for built in
+            int arg_count;
+            arg_count = get_arg_count(current_command);
+            char *args[arg_count + 1];
+            char **arg_pointers = get_args(current_command, arg_count);
+            if (arg_pointers == NULL)
+                return;
+            int i;
+            for (i = 0; i < arg_count; i++) {
+                args[i] = arg_pointers[i];
+            }
+            
+            for (i=0; i<3; i++) {
+                if (strcmp(args[0],built_in_commands[i]) == 0) {
+                    execute_built_in_command(args, arg_count, i);
+                    built_in_run = 1;
+                }
+            }
+
             char *parallel_commands = malloc(sizeof(char) * (command_length - index));
             strcpy(parallel_commands, command + index + 1);
             parse_command(parallel_commands);
         }
         if (strlen(trim_string(current_command)) == 0) 
-            error("LINE 247");
-        else {
+            error();
+        else if (built_in_run == 0) {
             char *trimmed_cmd = trim_string(current_command);
             if (trimmed_cmd == NULL)
                 return;
@@ -267,16 +362,15 @@ int main(int argc, char *argv[])
 {
 
 	size_t characters;
-    size_t buffer_size = 0;
+    size_t buffer_size = 32;
     FILE *input = stdin;
-	// initialize buffer
-	
+    
+
     if (argc > 2) {
-        error("LINE 275");
+        error();
         exit(EXIT_FAILURE);
     }
         
-    
     // switch to batch mode if given file
     if (argc == 2) {
         char **pargv = argv+1;
@@ -286,12 +380,12 @@ int main(int argc, char *argv[])
             input = fopen(*pargv, "r");
         }
         else {
-            error("LINE 289");
+            error();
             exit(EXIT_FAILURE);
         }
 
         if (input == NULL || input == stdin) {
-            error("LINE 294");
+            error();
             exit(EXIT_FAILURE);
         }
     }
@@ -300,23 +394,30 @@ int main(int argc, char *argv[])
     while (1) {
         if (input == stdin)
             printf("dash> ");
-        char *buffer = (char *)malloc(buffer_size * sizeof(char));
+    
+    	char *buffer;
+        // initialize buffer
+        buffer = (char *)malloc(buffer_size * sizeof(char));
+        
         if (buffer == NULL) {
-            error("LINE 275");
+            error();
             exit(EXIT_FAILURE);
         }
+
         // use getline() to get the input string
         characters = getline(&buffer, &buffer_size, input);
+
         // check if user entered EOF (Ctrl+D) or the first token was exit
         if(characters == -1)
             break;
         
-
         // give input from stdin or file to run_command
         parse_command(trim_string(buffer));
         // if (strstr(buffer,"exit") != NULL)
         //     break;
-        free(buffer);
+
+        if (buffer)
+            free(buffer);
         if (exit_requested == 1)
             break;
     }
@@ -324,5 +425,8 @@ int main(int argc, char *argv[])
     if (input != stdin)
         fclose(input);
 
+    
+
     exit(EXIT_SUCCESS);
 }
+
