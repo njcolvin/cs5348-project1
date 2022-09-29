@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 
+#pragma region global variables
 char *path = "/bin";
 char error_message[30] = "An error has occurred\n";
 char built_in_commands[3][5] = {
@@ -15,11 +16,15 @@ char built_in_commands[3][5] = {
 };
 const char *redirect = ">";
 int exit_requested = 0;
+#pragma endregion
 
 void error() {
     write(STDERR_FILENO, error_message, strlen(error_message));
 }
 
+/// @brief Trims leading and trailing white spaces
+/// @param str 
+/// @return trimmed string
 char *trim_string(char const *str) {
     int l = strlen(str);
     int i = 0;
@@ -68,10 +73,15 @@ char* concat(const char *s1, const char *s2)
     return result;
 }
 
+/// @brief executes custom logic of built in commands
+/// @param args command and its arguments
+/// @param number_of_args no. of arguments including the command
+/// @param command_index type of command
 void execute_built_in_command(char *args[], int number_of_args, int command_index) {
     switch (command_index)
     {
     case 0:
+    //implement exit
         if (number_of_args > 1)
             error();
         else
@@ -107,6 +117,9 @@ void execute_built_in_command(char *args[], int number_of_args, int command_inde
     }
 }
 
+/// @brief calculates the number of arguments in a command
+/// @param buffer full command as a string
+/// @return number of arguments
 int get_arg_count(char *buffer) {
     char *buffer_copy, *token, *last_token;
     const char *token_sep = " \t\v\f\r\n";
@@ -124,6 +137,10 @@ int get_arg_count(char *buffer) {
     return i;
 }
 
+/// @brief converts string command to array of strings by splitting on whitespaces
+/// @param buffer full string command
+/// @param arg_count number of args in command, including the command
+/// @return array of tokens
 char** get_args(char *buffer, int arg_count) {
     // parse the tokens into args array
 
@@ -164,6 +181,8 @@ char** get_args(char *buffer, int arg_count) {
     return args;
 }
 
+/// @brief checks for redirection and runs the command using execv
+/// @param buffer string command
 void run_command(char *buffer)
 {
     // define the required variables
@@ -270,93 +289,83 @@ void run_command(char *buffer)
     } else {
         wait(&status);
     }
-
-    
 }
 
+/// @brief parses the command and is called recursively for parallel commands
+/// @param command single line input entered by user or batch file
 void parse_command(char *command) {
-    // int status;
-    // pid_t process_id = fork();
-    // if (process_id == 0) {
-        char *delimiter_address = strchr(command, '&');
+    char *delimiter_address = strchr(command, '&');
+    
+    int built_in_run = 0;
+    int command_length = strlen(command);
+    if (command_length <= 1)
+        return;
+    int index = (delimiter_address == NULL ? -1 : delimiter_address - command);
+    char *current_command;
+    if (index == -1) {
+        current_command = malloc(sizeof(char) * (command_length + 1));
+        strcpy(current_command, command);
+        // check for built in
+        int arg_count;
+        arg_count = get_arg_count(current_command);
+        char *args[arg_count + 1];
+        char **arg_pointers = get_args(current_command, arg_count);
+        if (arg_pointers == NULL)
+            return;
+        int i;
+        for (i = 0; i < arg_count; i++) {
+            args[i] = arg_pointers[i];
+        }
+        for (i=0; i<3; i++) {
+            if (strcmp(args[0],built_in_commands[i]) == 0) {
+                execute_built_in_command(args, arg_count, i);
+                return;
+            }
+        }
+    }
+    else if (index == 0) {
+        error();
+        return;
+    }
+    else {
+        current_command = malloc(sizeof(char) * (index + 1));
+        strncpy(current_command, command, index);
+        // check for built in
+        int arg_count;
+        arg_count = get_arg_count(current_command);
+        char *args[arg_count + 1];
+        char **arg_pointers = get_args(current_command, arg_count);
+        if (arg_pointers == NULL)
+            return;
+        int i;
+        for (i = 0; i < arg_count; i++) {
+            args[i] = arg_pointers[i];
+        }
         
-        int built_in_run = 0;
-        int command_length = strlen(command);
-        if (command_length <= 1)
+        for (i=0; i<3; i++) {
+            if (strcmp(args[0],built_in_commands[i]) == 0) {
+                execute_built_in_command(args, arg_count, i);
+                built_in_run = 1;
+            }
+        }
+
+        char *parallel_commands = malloc(sizeof(char) * (command_length - index));
+        strcpy(parallel_commands, command + index + 1);
+        parse_command(parallel_commands);
+    }
+    if (strlen(trim_string(current_command)) == 0) 
+        error();
+    else if (built_in_run == 0) {
+        char *trimmed_cmd = trim_string(current_command);
+        if (trimmed_cmd == NULL)
             return;
-        int index = (delimiter_address == NULL ? -1 : delimiter_address - command);
-        char *current_command;
-        if (index == -1) {
-            current_command = malloc(sizeof(char) * (command_length + 1));
-            strcpy(current_command, command);
+        
+        run_command(trimmed_cmd);
 
-            // check for built in
-            int arg_count;
-            arg_count = get_arg_count(current_command);
-            char *args[arg_count + 1];
-            char **arg_pointers = get_args(current_command, arg_count);
-            if (arg_pointers == NULL)
-                return;
-            int i;
-            for (i = 0; i < arg_count; i++) {
-                args[i] = arg_pointers[i];
-            }
-
-            for (i=0; i<3; i++) {
-                if (strcmp(args[0],built_in_commands[i]) == 0) {
-                    execute_built_in_command(args, arg_count, i);
-                    return;
-                }
-            }
-        }
-        else if (index == 0) {
-            error();
-            return;
-        }
-        else {
-            current_command = malloc(sizeof(char) * (index + 1));
-            strncpy(current_command, command, index);
-
-
-            // check for built in
-            int arg_count;
-            arg_count = get_arg_count(current_command);
-            char *args[arg_count + 1];
-            char **arg_pointers = get_args(current_command, arg_count);
-            if (arg_pointers == NULL)
-                return;
-            int i;
-            for (i = 0; i < arg_count; i++) {
-                args[i] = arg_pointers[i];
-            }
-            
-            for (i=0; i<3; i++) {
-                if (strcmp(args[0],built_in_commands[i]) == 0) {
-                    execute_built_in_command(args, arg_count, i);
-                    built_in_run = 1;
-                }
-            }
-
-            char *parallel_commands = malloc(sizeof(char) * (command_length - index));
-            strcpy(parallel_commands, command + index + 1);
-            parse_command(parallel_commands);
-        }
-        if (strlen(trim_string(current_command)) == 0) 
-            error();
-        else if (built_in_run == 0) {
-            char *trimmed_cmd = trim_string(current_command);
-            if (trimmed_cmd == NULL)
-                return;
-            
-            run_command(trimmed_cmd);
-
-        }
-    // }
-    // else {
-    //     wait(&status);
-    // }
+    }
     
 }
+
 
 int main(int argc, char *argv[])
 {
